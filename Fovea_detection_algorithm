@@ -1,1 +1,134 @@
+# Create imports
 
+import cv2
+import matplotlib.pyplot as plt
+from numpy import diff
+from scipy.signal import savgol_filter
+from scipy import signal
+from PIL import Image
+import os
+
+
+#Check for the row that corresponds to the beginning of the retina
+
+def pixels_above_threshold(image_path, threshold):
+    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    first_pixels = []
+    for col in range(image.shape[1]):
+        for row in range(image.shape[0]):
+            if image[row, col] > threshold:
+                first_pixels.append((col, row))
+                break
+    columns, rows = zip(*first_pixels)
+    return rows
+
+
+#Checks intersection points with 0
+
+def find_all_sign_changes(data):
+  sign_changes = []
+  previous_sign = None
+  for i in range(1, len(data)):
+    current_value = data[i]
+    current_sign = (current_value > 0)
+    if previous_sign is not None and current_sign != previous_sign:
+      sign_changes.append(i)
+    previous_sign = current_sign
+  return sign_changes
+
+
+def find_matches_within_tolerance(list1, list2, tolerance):
+  matches = []
+  for val1 in list1:
+    for val2 in list2:
+      if abs(val1 - val2) <= tolerance:
+        matches.append((val2) + 1 + limit)
+  return matches
+
+
+
+#Threshold to account for noise
+threshold = 50  
+limit =  350
+tolerance = 20
+
+#test images
+input_folder = r""
+output_folder = r""
+vertical_conversion = 1/0.2567 # Update according to the resolution of the device
+
+#Create output folder if it doesn't exist
+output_folder = os.path.join(output_folder)
+os.makedirs(output_folder, exist_ok=True)
+
+for filename in os.listdir(input_folder):
+    if filename.endswith(".png"):
+      image_path = os.path.join(input_folder, filename)
+      crop_dist_Fovea = 0
+      crop_dist_500 = 500/vertical_conversion
+      crop_dist_750 = 750/vertical_conversion
+      crop_dist_1000 = 1000/vertical_conversion
+      crop_width = 50 # for masks maybe put just exact location, therefore crop_width = 1
+      try:
+          img=Image.open(image_path)
+          values= pixels_above_threshold(image_path, threshold)
+          valuess=savgol_filter(values,400, 5)
+          dy = diff(savgol_filter(values, 400, 5)[limit:-limit])
+          derivative=savgol_filter(dy, 150, 3)
+          dypoints = find_all_sign_changes(derivative)
+          ddy = diff(derivative)
+          dderivative=savgol_filter(ddy, 150, 3)
+          ddypoints,properties  = signal.find_peaks(dderivative)
+          tolerance = 50
+#Plots retina boundaries
+          plt.figure(figsize=(10, 6))
+          plt.plot(valuess)
+          plt.title("First pixels above noise threshold after Savitzky-Golay Filter")
+          plt.grid(True)
+          plt.show()
+        
+          fovea_x = find_matches_within_tolerance(ddypoints, dypoints, tolerance)
+          fovea_x=dypoints[-1]+limit
+
+
+#Use this code if you want to subcrop the initial images
+          # # Fovea Region
+          # crop_x1_Fovea = fovea_x - crop_dist_Fovea - crop_width/2
+          # crop_x2_Fovea = fovea_x - crop_dist_Fovea + crop_width/2
+
+          # # ParaFovea Region 
+          # left_crop_x1_500 = fovea_x - crop_dist_500 - crop_width/2
+          # left_crop_x2_500 = fovea_x - crop_dist_500 + crop_width/2
+          # right_crop_x1_500 = fovea_x + crop_dist_500 - crop_width/2
+          # right_crop_x2_500 = fovea_x + crop_dist_500 + crop_width/2
+
+          # # Intermediate Region 
+          # left_crop_x1_750 = fovea_x - crop_dist_750 - crop_width/2
+          # left_crop_x2_750 = fovea_x - crop_dist_750 + crop_width/2
+          # right_crop_x1_750 = fovea_x + crop_dist_750 - crop_width/2
+          # right_crop_x2_750 = fovea_x + crop_dist_750 + crop_width/2
+
+          # # PeriFovea Region
+          # left_crop_x1_1000 = fovea_x - crop_dist_1000 - crop_width/2
+          # left_crop_x2_1000 = fovea_x - crop_dist_1000 + crop_width/2
+          # right_crop_x1_1000 = fovea_x + crop_dist_1000 - crop_width/2
+          # right_crop_x2_1000 = fovea_x + crop_dist_1000 + crop_width/2
+
+
+          # # Save cropped images to the output folder
+
+          # output_filename = os.path.splitext(filename)[0] 
+          # output_path = os.path.join(output_folder, f"{output_filename}.png")
+
+          # fovea_cropped_img = img.crop((crop_x1_Fovea, 0, crop_x2_Fovea, img.height))
+          # fovea_output_path = os.path.join(output_folder, f"{output_filename}_center_Fovea.png")
+          # fovea_cropped_img.save(fovea_output_path)
+
+          # for region in ["500", "750", "1000"]:
+          #   left_cropped_img = img.crop((eval(f"left_crop_x1_{region}"), 0, eval(f"left_crop_x2_{region}"), img.height))
+          #   right_cropped_img = img.crop((eval(f"right_crop_x1_{region}"), 0, eval(f"right_crop_x2_{region}"), img.height))
+          #   left_cropped_img.save(os.path.join(output_folder, f"{output_filename}_left_{region}.png"))
+          #   right_cropped_img.save(os.path.join(output_folder, f"{output_filename}_right_{region}.png"))
+
+      except Exception as e:
+        print(f"Error processing {filename}: {e}")  
